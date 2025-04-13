@@ -1,0 +1,7 @@
+path:  /content/drive/MyDrive/brain_tumor_dataset
+train: train/images
+val: valid/images
+
+names:
+  0: benign
+  1: malignant
