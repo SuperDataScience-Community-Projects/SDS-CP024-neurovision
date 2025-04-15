@@ -1,5 +1,6 @@
 streamlit
 ultralytics
+<<<<<<< HEAD
 opencv-python-headless==4.9.0.80
 matplotlib
 Pillow
@@ -7,3 +8,8 @@ numpy ==1.26.4
 torch==2.2.0
 torchvision == 0.17.0
 torchaudio==2.2.0
+=======
+opencv-python
+matplotlib
+pillow
+>>>>>>> fe582191732c1c1d810038f39dae70d2f66d9654
