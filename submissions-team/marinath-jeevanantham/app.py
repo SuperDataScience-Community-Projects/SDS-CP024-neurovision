@@ -1,11 +1,12 @@
 import streamlit as st
 import numpy as np
-import cv2
-from PIL import Image
+from PIL import Image, ImageOps
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from huggingface_hub import hf_hub_download
 import os
+from scipy import ndimage as ndi
+from skimage import measure, morphology
 
 # Download the actual model files from HF
 segmentation_model_path = hf_hub_download(
@@ -29,18 +30,18 @@ st.set_page_config(page_title="NeuroVision - Brain Tumor Detection", layout="wid
 
 # === Preprocessing function ===
 def preprocess_input_image(uploaded_file):
-    image = np.array(Image.open(uploaded_file).convert("RGB"))
-    image = cv2.resize(image, (224, 224))
-    image = image / 255.0
-    return image
+    image = Image.open(uploaded_file).convert("RGB")
+    image = ImageOps.fit(image, (224, 224), method=Image.Resampling.LANCZOS)
+    image_array = np.array(image) / 255.0
+    return image_array
 
 # === Overlay mask function ===
 def get_mask_overlay(image, mask):
     mask = (mask.squeeze() > 0.5).astype(np.uint8)
-    colored_mask = np.zeros_like(image)
-    colored_mask[..., 0] = mask * 255  # Red channel
-    overlay = cv2.addWeighted(image, 0.8, colored_mask, 0.5, 0)
-    return overlay
+    overlay = image.copy()
+    overlay[mask == 1] = [255, 0, 0]  # Red overlay
+    blended = (0.8 * image + 0.2 * overlay).astype(np.uint8)
+    return blended
 
 # === App Layout ===
 left, right = st.columns([1, 2])
@@ -86,24 +87,32 @@ if uploaded_file is not None:
         with col2:
             st.markdown("#### 🔬 Tumor Overlay")
 
-            # Filter tiny tumor regions before classification
-            mask_uint8 = (binary_mask.squeeze() * 255).astype(np.uint8)
-            contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            mask_uint8 = (binary_mask.squeeze() > 0.5).astype(np.uint8)
 
-            min_area = 300  # adjust this based on how small is too small
-            significant_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+            # Label connected regions
+            labeled_mask, num_labels = ndi.label(mask_uint8)
 
-            # Redraw mask only with valid contours
-            clean_mask = np.zeros_like(mask_uint8)
-            cv2.drawContours(clean_mask, significant_contours, -1, 255, thickness=cv2.FILLED)
+            # Measure region properties
+            regions = measure.regionprops(labeled_mask)
+
+            # Keep only regions with area > min_area
+            min_area = 300
+            keep_mask = np.zeros_like(mask_uint8)
+
+            for region in regions:
+                if region.area > min_area:
+                    keep_mask[labeled_mask == region.label] = 1
+
+            clean_mask = keep_mask
 
             # If you want to visualize only valid region overlay
-            refined_overlay = get_mask_overlay((image * 255).astype(np.uint8), clean_mask / 255.0)
+            refined_overlay = get_mask_overlay((image * 255).astype(np.uint8), clean_mask)
             st.image(refined_overlay, use_container_width=True)
 
         # Classification based on significant region
         st.markdown("### 🧪 Classification Result")
-        if len(significant_contours) > 0:
+        has_tumor = np.sum(clean_mask) > 0
+        if has_tumor > 0:
             class_prob = classifier_model.predict(image_input)[0][0]
             label = "Malignant" if class_prob > 0.5 else "Benign"
             confidence = class_prob if class_prob > 0.5 else 1 - class_prob

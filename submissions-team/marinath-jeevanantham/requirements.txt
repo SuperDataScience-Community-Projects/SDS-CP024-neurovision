@@ -6,3 +6,5 @@ pillow
 numpy
 matplotlib
 huggingface_hub
+scipy
+scikit-image
