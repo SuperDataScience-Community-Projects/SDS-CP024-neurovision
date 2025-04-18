@@ -1,1 +1,10 @@
 # Contains all libraries that are needed for this project
+streamlit
+tensorflow
+opencv-python
+pillow
+numpy
+matplotlib
+huggingface_hub
+scipy
+scikit-image
